@@ -1,0 +1,46 @@
+actions:
+  - id: restart_service
+    description: Restart a failed systemd service unit
+    fault_categories:
+      - application
+      - os
+    hardware_must_be_uninvolved: true
+    parameters:
+      - name: unit_name
+        type: string
+        pattern: "^[a-z0-9_.-]+\\.service$"
+    sudo_required: true
+    reversible: true
+
+  - id: vacuum_logs
+    description: Truncate journal logs to free disk space
+    fault_categories:
+      - os
+    hardware_must_be_uninvolved: true
+    parameters:
+      - name: max_size
+        type: string
+        pattern: "^[0-9]+[MG]$"
+    sudo_required: true
+    reversible: false
+
+  - id: reap_zombies
+    description: Signal parents of zombie processes to reap them
+    fault_categories:
+      - os
+    hardware_must_be_uninvolved: true
+    parameters: []
+    sudo_required: false
+    reversible: true
+
+  - id: trigger_vacuum
+    description: Run PostgreSQL VACUUM ANALYZE on a table
+    fault_categories:
+      - database
+    hardware_must_be_uninvolved: true
+    parameters:
+      - name: table_name
+        type: string
+        pattern: "^[a-z_][a-z0-9_]*$"
+    sudo_required: false
+    reversible: false

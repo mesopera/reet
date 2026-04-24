@@ -1,0 +1,43 @@
+{
+  "WDC": {
+    "prefix": ["WDC", "WD"],
+    "attributes": {
+      "1":  {"name": "Read Error Rate", "failure_threshold": 50},
+      "5":  {"name": "Reallocated Sectors Count", "failure_threshold": 10},
+      "187": {"name": "Reported Uncorrectable Errors", "failure_threshold": 1},
+      "188": {"name": "Command Timeout", "failure_threshold": 100},
+      "197": {"name": "Current Pending Sector Count", "failure_threshold": 5},
+      "198": {"name": "Offline Uncorrectable", "failure_threshold": 1}
+    }
+  },
+  "Seagate": {
+    "prefix": ["ST"],
+    "attributes": {
+      "1":  {"name": "Read Error Rate", "failure_threshold": 50},
+      "5":  {"name": "Reallocated Sectors Count", "failure_threshold": 5},
+      "187": {"name": "Reported Uncorrectable Errors", "failure_threshold": 1},
+      "197": {"name": "Current Pending Sector Count", "failure_threshold": 1},
+      "198": {"name": "Offline Uncorrectable", "failure_threshold": 1}
+    }
+  },
+  "Samsung": {
+    "prefix": ["SAMSUNG", "MZ"],
+    "attributes": {
+      "5":   {"name": "Reallocated Sectors Count", "failure_threshold": 10},
+      "177": {"name": "Wear Leveling Count", "failure_threshold": 10},
+      "179": {"name": "Used Reserved Block Count Total", "failure_threshold": 10},
+      "181": {"name": "Program Fail Count Total", "failure_threshold": 10},
+      "182": {"name": "Erase Fail Count Total", "failure_threshold": 10},
+      "187": {"name": "Reported Uncorrectable Errors", "failure_threshold": 1}
+    }
+  },
+  "Toshiba": {
+    "prefix": ["TOSHIBA", "MQ", "DT"],
+    "attributes": {
+      "5":   {"name": "Reallocated Sectors Count", "failure_threshold": 8},
+      "187": {"name": "Reported Uncorrectable Errors", "failure_threshold": 1},
+      "197": {"name": "Current Pending Sector Count", "failure_threshold": 3},
+      "198": {"name": "Offline Uncorrectable", "failure_threshold": 1}
+    }
+  }
+}

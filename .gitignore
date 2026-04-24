@@ -1,0 +1,10 @@
+.env
+data/backblaze/
+data/snapshots/
+data/incidents.db
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+influxdb2-2.7.1/
+influxdb2-2.7.1_linux_amd64.tar.gz

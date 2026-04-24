@@ -1,0 +1,46 @@
+system:
+  poll_interval_seconds: 60
+  mode: simulate  # 'simulate' or 'live'
+  log_level: INFO
+
+llm:
+  confidence_threshold: 0.75
+  model: claude-sonnet-4-5
+  max_tokens: 2000
+  max_retries: 3
+
+anomaly:
+  zscore:
+    default_threshold: 3.0
+    min_window_size: 10
+    thresholds:
+      cpu_temp: 2.5        # more sensitive for thermal
+      reallocated_sector_ct: 2.0   # very sensitive for SMART
+      ce_count: 2.0
+  isolation_forest:
+    contamination: 0.05
+    warmup_readings: 200
+    retrain_every_n: 1000
+  smart_acceleration:
+    monitored_attributes:
+      - reallocated_sector_ct
+      - reported_uncorrectable_errors
+      - command_timeout
+      - current_pending_sector_ct
+      - offline_uncorrectable
+    lookback_hours: 72
+    min_readings: 10
+  ecc_rate:
+    lookback_hours: 24
+    doubling_window_hours: 8
+
+influxdb:
+  url: http://localhost:8086
+  org: healing-system
+  bucket: telemetry
+
+sqlite:
+  path: data/incidents.db
+
+snapshots:
+  dir: data/snapshots
