@@ -7,4 +7,5 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 influxdb2-2.7.1/
-influxdb2-2.7.1_linux_amd64.tar.gz
+influxdb2-2.7.1_linux_amd64.tar.gzinfluxdb2-2.7.10/
+influxdb2-2.7.10_linux_amd64.tar.gz
