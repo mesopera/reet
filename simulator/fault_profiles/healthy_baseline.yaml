@@ -1,0 +1,10 @@
+name: healthy_baseline
+duration_hours: 168  # 1 week
+smart:
+  fault_mode: healthy
+ipmi:
+  fault_mode: healthy
+ecc:
+  fault_mode: healthy
+expected_detection_window_hours: null
+expected_remediation: null

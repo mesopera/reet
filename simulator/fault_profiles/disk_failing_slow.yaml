@@ -1,0 +1,13 @@
+name: disk_failing_slow
+duration_hours: 72
+smart:
+  fault_mode: reallocating
+  start_value: 5
+  acceleration_factor: 1.5
+  noise_std: 0.5
+ipmi:
+  fault_mode: healthy
+ecc:
+  fault_mode: healthy
+expected_detection_window_hours: 24
+expected_remediation: human_escalation
