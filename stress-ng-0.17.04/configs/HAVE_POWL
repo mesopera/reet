@@ -1,0 +1,2 @@
+# using HAVE_POWL
+CONFIG_LDFLAGS += -lm

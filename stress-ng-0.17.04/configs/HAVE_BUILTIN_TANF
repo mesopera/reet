@@ -1,0 +1,2 @@
+# using HAVE_BUILTIN_TANF
+CONFIG_LDFLAGS += -lm

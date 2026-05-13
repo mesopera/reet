@@ -1,0 +1,2 @@
+# using HAVE_BUILTIN_ROUNDL
+CONFIG_LDFLAGS += -lm

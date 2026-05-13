@@ -1,0 +1,2 @@
+# using HAVE_BUILTIN_SINL
+CONFIG_LDFLAGS += -lm

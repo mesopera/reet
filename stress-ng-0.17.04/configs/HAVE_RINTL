@@ -1,0 +1,2 @@
+# using HAVE_RINTL
+CONFIG_LDFLAGS += -lm

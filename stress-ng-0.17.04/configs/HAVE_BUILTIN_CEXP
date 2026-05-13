@@ -1,0 +1,2 @@
+# using HAVE_BUILTIN_CEXP
+CONFIG_LDFLAGS += -lm

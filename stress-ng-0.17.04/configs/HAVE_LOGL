@@ -1,0 +1,2 @@
+# using HAVE_LOGL
+CONFIG_LDFLAGS += -lm

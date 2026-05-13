@@ -1,0 +1,2 @@
+# using HAVE_BUILTIN_COSHL
+CONFIG_LDFLAGS += -lm

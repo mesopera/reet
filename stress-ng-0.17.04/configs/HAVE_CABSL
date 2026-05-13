@@ -1,0 +1,2 @@
+# using HAVE_CABSL
+CONFIG_LDFLAGS += -lm

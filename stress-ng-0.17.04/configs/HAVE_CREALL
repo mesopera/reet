@@ -1,0 +1,2 @@
+# using HAVE_CREALL
+CONFIG_LDFLAGS += -lm

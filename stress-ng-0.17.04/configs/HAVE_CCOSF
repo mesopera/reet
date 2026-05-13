@@ -1,0 +1,2 @@
+# using HAVE_CCOSF
+CONFIG_LDFLAGS += -lm
