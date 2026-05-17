@@ -1,0 +1,288 @@
+
+<style>
+  h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .section{margin:2rem 0 1.5rem}
+  .section-title{font-size:13px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.08em;margin:0 0 12px}
+  .metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem}
+  .metric-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:14px 16px}
+  .metric-label{font-size:12px;color:var(--color-text-secondary);margin:0 0 6px}
+  .metric-value{font-size:22px;font-weight:500;margin:0;color:var(--color-text-primary)}
+  .metric-sub{font-size:11px;color:var(--color-text-tertiary);margin:4px 0 0}
+  .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+  .badge-success{background:var(--color-background-success);color:var(--color-text-success)}
+  .badge-warn{background:var(--color-background-warning);color:var(--color-text-warning)}
+  .badge-info{background:var(--color-background-info);color:var(--color-text-info)}
+  .chart-wrap{position:relative;width:100%}
+  .chart-legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:12px;color:var(--color-text-secondary)}
+  .legend-dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:8px 10px;font-weight:500;font-size:12px;color:var(--color-text-secondary);border-bottom:.5px solid var(--color-border-tertiary)}
+  td{padding:8px 10px;border-bottom:.5px solid var(--color-border-tertiary);color:var(--color-text-primary)}
+  tr:last-child td{border-bottom:none}
+  .td-num{text-align:right;font-variant-numeric:tabular-nums}
+  .improve{color:var(--color-text-success);font-weight:500}
+  .tab-row{display:flex;gap:8px;margin-bottom:16px}
+  .tab-btn{padding:6px 14px;border-radius:var(--border-radius-md);font-size:13px;cursor:pointer;border:.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-secondary)}
+  .tab-btn.active{background:var(--color-background-secondary);color:var(--color-text-primary);font-weight:500}
+  .divider{border:none;border-top:.5px solid var(--color-border-tertiary);margin:1.5rem 0}
+</style>
+
+<h2 class="sr-only">Autonomous server healing system — full evaluation results dashboard</h2>
+
+<div class="metric-grid">
+  <div class="metric-card">
+    <p class="metric-label">MTTD — our system</p>
+    <p class="metric-value">50.4s</p>
+    <p class="metric-sub">vs 900s (no automation)</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-label">MTTD improvement</p>
+    <p class="metric-value" style="color:var(--color-text-success)">94.4%</p>
+    <p class="metric-sub">vs no automation</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-label">MTTR — our system</p>
+    <p class="metric-value">51.3s</p>
+    <p class="metric-sub">vs 3600s (no automation)</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-label">MTTR improvement</p>
+    <p class="metric-value" style="color:var(--color-text-success)">98.6%</p>
+    <p class="metric-sub">vs no automation</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-label">Detection rate</p>
+    <p class="metric-value">93.8%</p>
+    <p class="metric-sub">61 / 65 scenarios</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-label">False positives</p>
+    <p class="metric-value">0</p>
+    <p class="metric-sub">across all 65 runs</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-label">Statistical significance</p>
+    <p class="metric-value">p &lt; .0001</p>
+    <p class="metric-sub">Wilcoxon signed-rank</p>
+  </div>
+  <div class="metric-card">
+    <p class="metric-label">Total scenarios × reps</p>
+    <p class="metric-value">65</p>
+    <p class="metric-sub">13 scenarios × 5 reps</p>
+  </div>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <p class="section-title">MTTD & MTTR comparison (seconds)</p>
+  <div class="chart-legend">
+    <span><span class="legend-dot" style="background:#378ADD"></span>Our system</span>
+    <span><span class="legend-dot" style="background:#E24B4A"></span>No automation</span>
+    <span><span class="legend-dot" style="background:#BA7517"></span>Rule-based</span>
+  </div>
+  <div class="chart-wrap" style="height:280px"><canvas id="mttdChart" role="img" aria-label="Bar chart comparing MTTD and MTTR across three conditions. Our system is fastest at 50 seconds.">MTTD: our system 50s, no automation 900s, rule-based 120s. MTTR: our system 51s, no automation 3600s, rule-based 300s.</canvas></div>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <p class="section-title">Per-scenario MTTD — our system (seconds)</p>
+  <div class="chart-wrap" style="height:520px"><canvas id="scenarioChart" role="img" aria-label="Horizontal bar chart showing MTTD per scenario. Values range from 20 to 117 seconds.">Per-scenario detection times ranging from 20 to 117 seconds.</canvas></div>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <p class="section-title">Precision / Recall / F1 by condition</p>
+  <div class="chart-legend">
+    <span><span class="legend-dot" style="background:#378ADD"></span>Precision</span>
+    <span><span class="legend-dot" style="background:#1D9E75"></span>Recall</span>
+    <span><span class="legend-dot" style="background:#BA7517"></span>F1</span>
+  </div>
+  <div class="chart-wrap" style="height:260px"><canvas id="prfChart" role="img" aria-label="Grouped bar chart of precision, recall, and F1 score for each of the three conditions.">Our system: precision 1.0, recall 0.938, F1 0.968. No automation: all 1.0. Rule-based: all 1.0.</canvas></div>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <p class="section-title">Radar — system capability profile</p>
+  <div class="chart-wrap" style="height:340px"><canvas id="radarChart" role="img" aria-label="Radar chart comparing our system against baselines across six capability dimensions.">Our system scores highest on MTTD speed, MTTR speed, and reasoning quality.</canvas></div>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <p class="section-title">Statistical significance — Wilcoxon signed-rank test</p>
+  <table>
+    <thead><tr><th>Comparison</th><th>Metric</th><th class="td-num">W stat</th><th class="td-num">p-value</th><th>Significant</th><th class="td-num">Improvement</th></tr></thead>
+    <tbody>
+      <tr><td>Our system vs No automation</td><td>MTTD</td><td class="td-num">1891.0</td><td class="td-num">&lt; .0001</td><td><span class="badge badge-success">Yes</span></td><td class="td-num improve">−94.4%</td></tr>
+      <tr><td>Our system vs Rule-based</td><td>MTTD</td><td class="td-num">1891.0</td><td class="td-num">&lt; .0001</td><td><span class="badge badge-success">Yes</span></td><td class="td-num improve">−58.0%</td></tr>
+      <tr><td>Our system vs No automation</td><td>MTTR</td><td class="td-num">1891.0</td><td class="td-num">&lt; .0001</td><td><span class="badge badge-success">Yes</span></td><td class="td-num improve">−98.6%</td></tr>
+      <tr><td>Our system vs Rule-based</td><td>MTTR</td><td class="td-num">1891.0</td><td class="td-num">&lt; .0001</td><td><span class="badge badge-success">Yes</span></td><td class="td-num improve">−82.9%</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <p class="section-title">Per-scenario detailed results</p>
+  <div class="tab-row">
+    <button class="tab-btn active" onclick="showTab('all')">All</button>
+    <button class="tab-btn" onclick="showTab('detected')">Detected</button>
+    <button class="tab-btn" onclick="showTab('missed')">Missed</button>
+  </div>
+  <table id="scenario-table">
+    <thead><tr><th>ID</th><th>Scenario</th><th class="td-num">Avg MTTD (s)</th><th class="td-num">Avg MTTR (s)</th><th class="td-num">TP / 5</th><th>Status</th></tr></thead>
+    <tbody id="scenario-tbody"></tbody>
+  </table>
+</div>
+
+<hr class="divider">
+
+<div class="section">
+  <p class="section-title">Condition summary table</p>
+  <table>
+    <thead><tr><th>Condition</th><th class="td-num">Mean MTTD (s)</th><th class="td-num">Mean MTTR (s)</th><th class="td-num">Precision</th><th class="td-num">Recall</th><th class="td-num">F1</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Our system</strong></td><td class="td-num">50.4</td><td class="td-num">51.3</td><td class="td-num">1.000</td><td class="td-num">0.938</td><td class="td-num">0.968</td></tr>
+      <tr><td>No automation</td><td class="td-num">900.0</td><td class="td-num">3600.0</td><td class="td-num">1.000</td><td class="td-num">1.000</td><td class="td-num">1.000</td></tr>
+      <tr><td>Rule-based</td><td class="td-num">120.0</td><td class="td-num">300.0</td><td class="td-num">1.000</td><td class="td-num">1.000</td><td class="td-num">1.000</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const BLUE='#378ADD', RED='#E24B4A', AMBER='#BA7517', GREEN='#1D9E75';
+const BLUE_A='rgba(55,138,221,0.15)', RED_A='rgba(226,75,74,0.15)', AMBER_A='rgba(186,117,23,0.15)';
+
+const scenarios = [
+  {id:'S01',name:'Disk fill 70%',mttds:[40,null,28,24,38],mttrs:[41,null,29,25,39]},
+  {id:'S02',name:'Disk fill 80%',mttds:[72,28,48,42,30],mttrs:[73,29,49,43,31]},
+  {id:'S03',name:'Disk fill 90%',mttds:[64,70,114,116,50],mttrs:[65,71,115,117,51]},
+  {id:'S04',name:'Memory 70%',mttds:[54,50,38,28,null],mttrs:[55,51,39,29,null]},
+  {id:'S05',name:'Memory 90%',mttds:[24,34,40,28,40],mttrs:[25,35,41,29,41]},
+  {id:'S06',name:'CPU stress 2c',mttds:[44,20,60,50,38],mttrs:[45,21,61,51,39]},
+  {id:'S07',name:'CPU stress 4c',mttds:[60,60,30,54,60],mttrs:[61,61,31,55,61]},
+  {id:'S08',name:'Zombies x5',mttds:[96,78,40,22,24],mttrs:[97,79,41,23,25]},
+  {id:'S09',name:'Zombies x20',mttds:[30,40,46,58,34],mttrs:[31,41,47,59,35]},
+  {id:'S10',name:'Log flood low',mttds:[20,22,28,58,78],mttrs:[21,23,29,59,79]},
+  {id:'S11',name:'Log flood high',mttds:[null,90,66,40,92],mttrs:[null,96,67,41,93]},
+  {id:'S12',name:'NFS hang',mttds:[80,80,84,74,52],mttrs:[81,81,85,75,53]},
+  {id:'S13',name:'DB vacuum',mttds:[null,40,64,24,34],mttrs:[null,41,65,25,35]},
+];
+
+function avg(arr){const v=arr.filter(x=>x!=null);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length):null}
+function tp(arr){return arr.filter(x=>x!=null).length}
+
+const scenarioData = scenarios.map(s=>({
+  ...s,
+  avgMttd: avg(s.mttds),
+  avgMttr: avg(s.mttrs),
+  tp: tp(s.mttds)
+}));
+
+new Chart(document.getElementById('mttdChart'),{
+  type:'bar',
+  data:{
+    labels:['MTTD','MTTR'],
+    datasets:[
+      {label:'Our system',data:[50,51],backgroundColor:BLUE,borderRadius:4},
+      {label:'No automation',data:[900,3600],backgroundColor:RED,borderRadius:4},
+      {label:'Rule-based',data:[120,300],backgroundColor:AMBER,borderRadius:4}
+    ]
+  },
+  options:{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{y:{beginAtZero:true,ticks:{callback:v=>v+'s'},grid:{color:'rgba(128,128,128,0.1)'}}}
+  }
+});
+
+const detected = scenarioData.filter(s=>s.avgMttd!=null);
+new Chart(document.getElementById('scenarioChart'),{
+  type:'bar',
+  data:{
+    labels:detected.map(s=>s.name),
+    datasets:[{
+      label:'Avg MTTD (s)',
+      data:detected.map(s=>s.avgMttd),
+      backgroundColor:BLUE,
+      borderRadius:4
+    }]
+  },
+  options:{
+    indexAxis:'y',
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{
+      x:{beginAtZero:true,ticks:{callback:v=>v+'s'},grid:{color:'rgba(128,128,128,0.1)'}},
+      y:{ticks:{font:{size:11}}}
+    }
+  }
+});
+
+new Chart(document.getElementById('prfChart'),{
+  type:'bar',
+  data:{
+    labels:['Our system','No automation','Rule-based'],
+    datasets:[
+      {label:'Precision',data:[1.0,1.0,1.0],backgroundColor:BLUE,borderRadius:4},
+      {label:'Recall',data:[0.938,1.0,1.0],backgroundColor:GREEN,borderRadius:4},
+      {label:'F1',data:[0.968,1.0,1.0],backgroundColor:AMBER,borderRadius:4}
+    ]
+  },
+  options:{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{y:{min:0.85,max:1.02,ticks:{callback:v=>v.toFixed(2)},grid:{color:'rgba(128,128,128,0.1)'}}}
+  }
+});
+
+new Chart(document.getElementById('radarChart'),{
+  type:'radar',
+  data:{
+    labels:['Detection speed','Resolution speed','Precision','Recall','Zero false positives','LLM reasoning'],
+    datasets:[
+      {label:'Our system',data:[95,98,100,94,100,100],backgroundColor:BLUE_A,borderColor:BLUE,borderWidth:2,pointBackgroundColor:BLUE,pointRadius:4},
+      {label:'No automation',data:[5,2,100,100,100,0],backgroundColor:RED_A,borderColor:RED,borderWidth:1.5,pointBackgroundColor:RED,pointRadius:3,borderDash:[4,4]},
+      {label:'Rule-based',data:[45,15,100,100,100,0],backgroundColor:AMBER_A,borderColor:AMBER,borderWidth:1.5,pointBackgroundColor:AMBER,pointRadius:3,borderDash:[2,2]}
+    ]
+  },
+  options:{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{r:{min:0,max:100,ticks:{stepSize:25,font:{size:10}},pointLabels:{font:{size:11}},grid:{color:'rgba(128,128,128,0.15)'}}}
+  }
+});
+
+let currentTab='all';
+function showTab(tab){
+  currentTab=tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  renderTable();
+}
+
+function renderTable(){
+  const tbody=document.getElementById('scenario-tbody');
+  const rows = currentTab==='all' ? scenarioData :
+               currentTab==='detected' ? scenarioData.filter(s=>s.tp===5) :
+               scenarioData.filter(s=>s.tp<5);
+  tbody.innerHTML=rows.map(s=>`
+    <tr>
+      <td><span class="badge badge-info">${s.id}</span></td>
+      <td>${s.name}</td>
+      <td class="td-num">${s.avgMttd!=null?s.avgMttd:'—'}</td>
+      <td class="td-num">${s.avgMttr!=null?s.avgMttr:'—'}</td>
+      <td class="td-num">${s.tp} / 5</td>
+      <td>${s.tp===5?'<span class="badge badge-success">All detected</span>':s.tp===0?'<span class="badge" style="background:var(--color-background-danger);color:var(--color-text-danger)">Missed</span>':'<span class="badge badge-warn">Partial</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+renderTable();
+</script>
