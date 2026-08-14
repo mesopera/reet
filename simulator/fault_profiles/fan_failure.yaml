@@ -1,9 +1,9 @@
-name: psu_unstable
-duration_hours: 24
+name: fan_failure
+duration_hours: 12
 smart:
   fault_mode: healthy
 ipmi:
-  fault_mode: psu_unstable
+  fault_mode: fan_failure
 ecc:
   fault_mode: healthy
 expected_detection_window_hours: 1

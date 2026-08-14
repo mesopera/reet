@@ -1,5 +1,6 @@
 # LLM
 anthropic>=0.30.0
+groq
 
 # Data
 pandas>=2.0.0

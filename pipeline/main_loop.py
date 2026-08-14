@@ -149,17 +149,25 @@ def run():
             print(f"  [^] Escalating to human — gate failed: {decision.gate_failed}")
             print(f"  Reason: {decision.reason}")
 
-            human_report = (
-                f"INCIDENT REPORT\n"
-                f"Root Cause: {incident.root_cause}\n"
-                f"Component: {incident.root_cause_component}\n"
-                f"Confidence: {incident.confidence}\n"
-                f"Category: {incident.fault_category}\n"
-                f"Hardware Involved: {incident.hardware_involved}\n\n"
-                f"Summary: {incident.plain_language_summary}\n\n"
-                f"Causal Chain:\n" +
-                "\n".join([f"  - {s.component}: {s.event}" for s in incident.causal_chain])
-            )
+            if incident.hardware_involved:
+                from hardware_diagnostics.report_generator import generate as generate_hw_report
+                hw_signal = next(
+                    (s for s in report.flagged_signals if s.source in ('smart', 'ecc', 'ipmi')),
+                    report.flagged_signals[0]
+                )
+                human_report = generate_hw_report(incident, hw_signal)
+            else:
+                human_report = (
+                    f"INCIDENT REPORT\n"
+                    f"Root Cause: {incident.root_cause}\n"
+                    f"Component: {incident.root_cause_component}\n"
+                    f"Confidence: {incident.confidence}\n"
+                    f"Category: {incident.fault_category}\n"
+                    f"Hardware Involved: {incident.hardware_involved}\n\n"
+                    f"Summary: {incident.plain_language_summary}\n\n"
+                    f"Causal Chain:\n" +
+                    "\n".join([f"  - {s.component}: {s.event}" for s in incident.causal_chain])
+                )
 
             audit.log_escalation(incident_id, decision.reason, human_report)
             print(f"  Human report saved to audit log")
