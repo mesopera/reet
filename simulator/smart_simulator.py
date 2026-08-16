@@ -63,7 +63,7 @@ class SmartSimulator:
         self.attributes["power_on_hours"] += 1
         
         # Small temperature variation
-        self.attributes["temperature_celsius"] = 35 + np.random.normal(0, 2)
+        self.attributes["temperature_celsius"] = 35 + np.random.normal(0, 0.5)
         
         # Build smartctl-like output
         return {

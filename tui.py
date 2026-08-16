@@ -1,23 +1,25 @@
 """
-Live terminal dashboard for the autonomous server healing system.
-Run alongside the main pipeline in a second terminal:
+Interactive TUI for the autonomous server healing system.
+Requires: pip install textual
 
+Run alongside the main pipeline in a second terminal:
   Pane 1:  POLL_INTERVAL_SECONDS=3 python -m pipeline.main_loop
   Pane 2:  python tui.py
+
+Controls: ↑/↓ to browse incidents, detail panel updates live. q to quit.
 """
-import sqlite3, os, time, json
+import sqlite3, os
 from datetime import datetime
 from dotenv import load_dotenv
-from rich.live import Live
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.table import Table
+
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widgets import Header, Footer, DataTable, Static, RichLog
+from textual.reactive import reactive
 from rich.text import Text
-from rich.console import Console
 
 load_dotenv()
 DB_PATH = os.getenv("SQLITE_PATH", "data/incidents.db")
-console = Console()
 
 
 def get_conn():
@@ -26,133 +28,164 @@ def get_conn():
     return conn
 
 
-def build_layout() -> Layout:
-    layout = Layout()
-    layout.split_column(
-        Layout(name="header", size=3),
-        Layout(name="body"),
-        Layout(name="footer", size=3),
-    )
-    layout["body"].split_row(
-        Layout(name="incidents", ratio=2),
-        Layout(name="audit", ratio=2),
-    )
-    return layout
+class StatsBar(Static):
+    total = reactive(0)
+    actioned = reactive(0)
+    escalated = reactive(0)
+    hardware = reactive(0)
+
+    def render(self) -> Text:
+        t = Text()
+        t.append("  ● LIVE  ", style="bold white on dark_green")
+        t.append("   Total: ", style="dim"); t.append(f"{self.total}", style="bold white")
+        t.append("   Auto-remediated: ", style="dim"); t.append(f"{self.actioned}", style="bold green")
+        t.append("   Escalated: ", style="dim"); t.append(f"{self.escalated}", style="bold yellow")
+        t.append("   Hardware faults: ", style="dim"); t.append(f"{self.hardware}", style="bold red")
+        t.append(f"   {datetime.now().strftime('%H:%M:%S')}", style="dim")
+        return t
 
 
-def render_header() -> Panel:
-    return Panel(
-        Text("AUTONOMOUS SERVER HEALING SYSTEM  —  LIVE MONITOR", style="bold white on blue", justify="center"),
-        style="blue"
-    )
+class DetailPanel(Static):
+    content = reactive(None)
+
+    def render(self):
+        return self.content or Text("Select an incident above to view full details...", style="dim italic")
 
 
-def render_incidents(conn) -> Panel:
-    table = Table(expand=True, show_lines=False)
-    table.add_column("Time", style="dim", width=10)
-    table.add_column("Root Cause", ratio=3)
-    table.add_column("Conf", width=6, justify="center")
-    table.add_column("Category", width=10)
-    table.add_column("HW", width=4, justify="center")
-    table.add_column("Outcome", width=14)
+class HealingApp(App):
+    CSS = """
+    #stats { height: 1; background: $panel; padding: 0 1; }
+    #body { height: 1fr; }
+    #incidents { width: 55%; border: round cyan; }
+    #right { width: 45%; }
+    #detail { height: 60%; border: round magenta; padding: 1; }
+    #audit { height: 40%; border: round yellow; }
+    """
+    BINDINGS = [("q", "quit", "Quit"), ("r", "refresh", "Refresh")]
 
-    rows = conn.execute(
-        "SELECT detected_at, root_cause, confidence, fault_category, "
-        "hardware_involved, action_taken, escalated FROM incidents "
-        "ORDER BY detected_at DESC LIMIT 12"
-    ).fetchall()
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield StatsBar(id="stats")
+        with Horizontal(id="body"):
+            yield DataTable(id="incidents")
+            with Vertical(id="right"):
+                yield VerticalScroll(DetailPanel(id="detail_inner"), id="detail")
+                yield RichLog(id="audit", markup=True, wrap=True)
+        yield Footer()
 
-    for r in rows:
-        t = r["detected_at"][11:19] if r["detected_at"] else "—"
-        cause = (r["root_cause"] or "")[:48]
-        conf = f"{r['confidence']:.2f}" if r["confidence"] is not None else "—"
-        cat = r["fault_category"] or "—"
-        hw = Text("YES", style="bold red") if r["hardware_involved"] else Text("no", style="dim")
+    def on_mount(self):
+        table = self.query_one("#incidents", DataTable)
+        table.add_columns("Time", "Root Cause", "Conf", "Category", "HW", "Outcome")
+        table.cursor_type = "row"
+        table.zebra_stripes = True
+        self._last_audit_id = 0
+        self.set_interval(1.0, self.refresh_data)
+        self.refresh_data()
 
-        if r["action_taken"]:
-            outcome = Text(f"✔ {r['action_taken']}", style="bold green")
-        elif r["escalated"]:
-            outcome = Text("⚠ escalated", style="bold yellow")
-        else:
-            outcome = Text("pending", style="dim")
+    def refresh_data(self):
+        conn = get_conn()
+        stats = self.query_one("#stats", StatsBar)
+        stats.total     = conn.execute("SELECT COUNT(*) c FROM incidents").fetchone()["c"]
+        stats.actioned  = conn.execute("SELECT COUNT(*) c FROM incidents WHERE action_taken IS NOT NULL").fetchone()["c"]
+        stats.escalated = conn.execute("SELECT COUNT(*) c FROM incidents WHERE escalated=1").fetchone()["c"]
+        stats.hardware  = conn.execute("SELECT COUNT(*) c FROM incidents WHERE hardware_involved=1").fetchone()["c"]
 
-        table.add_row(t, cause, conf, cat, hw, outcome)
+        table = self.query_one("#incidents", DataTable)
 
-    if not rows:
-        return Panel(Text("Waiting for first incident...", style="dim italic"), title="Incidents", border_style="cyan")
-
-    return Panel(table, title=f"Incidents  ({len(rows)} shown)", border_style="cyan")
-
-
-def render_audit(conn) -> Panel:
-    rows = conn.execute(
-        "SELECT timestamp, event_type, detail FROM audit_log "
-        "ORDER BY timestamp DESC LIMIT 14"
-    ).fetchall()
-
-    lines = []
-    style_map = {
-        "incident_created": "cyan",
-        "action_starting": "yellow",
-        "action_complete": "green",
-        "escalation": "red",
-        "gate_passed": "green",
-        "gate_failed": "red",
-        "llm_call_failed": "red",
-        "parse_failed": "red",
-    }
-
-    for r in rows:
-        t = r["timestamp"][11:19] if r["timestamp"] else "—"
-        style = style_map.get(r["event_type"], "white")
-        detail = (r["detail"] or "")[:60]
-        lines.append(Text.assemble(
-            (f"{t}  ", "dim"),
-            (f"{r['event_type']:<18}", style),
-            (detail, "white")
-        ))
-
-    if not lines:
-        return Panel(Text("No audit events yet...", style="dim italic"), title="Audit Trail", border_style="magenta")
-
-    body = Text("\n").join(lines)
-    return Panel(body, title="Audit Trail (live)", border_style="magenta")
-
-
-def render_footer(conn) -> Panel:
-    total = conn.execute("SELECT COUNT(*) c FROM incidents").fetchone()["c"]
-    escalated = conn.execute("SELECT COUNT(*) c FROM incidents WHERE escalated=1").fetchone()["c"]
-    actioned = conn.execute("SELECT COUNT(*) c FROM incidents WHERE action_taken IS NOT NULL").fetchone()["c"]
-    now = datetime.now().strftime("%H:%M:%S")
-
-    text = Text.assemble(
-        (f"  Total incidents: ", "dim"), (f"{total}", "bold white"),
-        (f"   Auto-remediated: ", "dim"), (f"{actioned}", "bold green"),
-        (f"   Escalated: ", "dim"), (f"{escalated}", "bold yellow"),
-        (f"   |   {now}  ", "dim"),
-        ("Ctrl+C to exit", "dim italic"),
-    )
-    return Panel(text, style="on grey11")
-
-
-def main():
-    layout = build_layout()
-    with Live(layout, refresh_per_second=2, screen=True) as live:
-        while True:
+        # remember which incident was selected before rebuilding
+        selected_id = None
+        if table.row_count > 0 and table.cursor_row is not None:
             try:
-                conn = get_conn()
-                layout["header"].update(render_header())
-                layout["incidents"].update(render_incidents(conn))
-                layout["audit"].update(render_audit(conn))
-                layout["footer"].update(render_footer(conn))
-                conn.close()
-            except Exception as e:
-                layout["footer"].update(Panel(Text(f"  Error: {e}", style="red"), style="on grey11"))
-            time.sleep(1)
+                row_key, _ = table.coordinate_to_cell_key(table.cursor_coordinate)
+                selected_id = row_key.value
+            except Exception:
+                selected_id = None
+
+        rows = conn.execute(
+            "SELECT id, detected_at, root_cause, confidence, fault_category, "
+            "hardware_involved, action_taken, escalated FROM incidents "
+            "ORDER BY detected_at DESC LIMIT 30"
+        ).fetchall()
+
+        table.clear()
+        new_cursor_index = 0
+        for i, r in enumerate(rows):
+            t = r["detected_at"][11:19] if r["detected_at"] else "—"
+            cause = (r["root_cause"] or "")[:38]
+            conf = f"{r['confidence']:.2f}" if r["confidence"] is not None else "—"
+            hw = Text("YES", style="bold red") if r["hardware_involved"] else Text("no", style="dim")
+            if r["action_taken"]:
+                outcome = Text(f"✔ {r['action_taken']}", style="bold green")
+            elif r["escalated"]:
+                outcome = Text("⚠ escalated", style="bold yellow")
+            else:
+                outcome = Text("pending", style="dim")
+            table.add_row(t, cause, conf, r["fault_category"] or "—", hw, outcome, key=r["id"])
+            if r["id"] == selected_id:
+                new_cursor_index = i
+
+        if table.row_count > 0:
+            table.cursor_coordinate = (new_cursor_index, 0)
+            row_key, _ = table.coordinate_to_cell_key(table.cursor_coordinate)
+            self.show_detail(row_key.value, conn)
+
+        audit = self.query_one("#audit", RichLog)
+        style_map = {"incident_created": "cyan", "action_starting": "yellow", "action_complete": "green",
+                     "escalation": "red", "gate_passed": "green", "gate_failed": "red"}
+        for e in conn.execute("SELECT id, timestamp, event_type, detail FROM audit_log WHERE id > ? ORDER BY id ASC",
+                               (self._last_audit_id,)).fetchall():
+            t = e["timestamp"][11:19] if e["timestamp"] else "—"
+            style = style_map.get(e["event_type"], "white")
+            audit.write(f"[dim]{t}[/dim]  [{style}]{e['event_type']:<18}[/{style}] {e['detail'][:70]}")
+            self._last_audit_id = e["id"]
+        conn.close()
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted):
+        conn = get_conn()
+        self.show_detail(event.row_key.value, conn)
+        conn.close()
+
+    def show_detail(self, incident_id, conn):
+        row = conn.execute("SELECT * FROM incidents WHERE id=?", (incident_id,)).fetchone()
+        if not row:
+            return
+        txt = Text()
+        txt.append("Root Cause\n", style="bold underline")
+        txt.append(f"{row['root_cause']}\n\n")
+
+        txt.append("Confidence: ", style="bold"); txt.append(f"{row['confidence']:.2f}   ", style="cyan")
+        txt.append("Category: ", style="bold"); txt.append(f"{row['fault_category']}   ", style="cyan")
+        txt.append("Hardware: ", style="bold")
+        txt.append(f"{'YES' if row['hardware_involved'] else 'No'}\n", style="red" if row["hardware_involved"] else "green")
+        txt.append(f"Detected: {row['detected_at']}\n\n", style="dim")
+
+        if row["action_taken"]:
+            txt.append("✔ AUTO-REMEDIATED\n", style="bold green")
+            txt.append(f"Action: {row['action_taken']}   Outcome: {row['action_outcome']}\n\n", style="green")
+        elif row["escalated"]:
+            txt.append("⚠ ESCALATED TO HUMAN\n\n", style="bold yellow")
+
+        import json as _json
+        try:
+            chain = _json.loads(row["causal_chain"]) if row["causal_chain"] else []
+        except Exception:
+            chain = []
+        if chain:
+            txt.append("Causal Chain\n", style="bold underline")
+            for i, step in enumerate(chain):
+                txt.append(f"  [{i+1}] {step.get('component','?')}: {step.get('event','?')}\n")
+            txt.append("\n")
+
+        if row["reasoning_chain"]:
+            txt.append("LLM Reasoning\n", style="bold underline")
+            txt.append(f"{row['reasoning_chain']}\n\n", style="italic")
+
+        if row["human_report"]:
+            txt.append("── Full Report ──\n", style="bold magenta")
+            txt.append(row["human_report"])
+
+        self.query_one("#detail_inner", DetailPanel).content = txt
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        console.print("\n[bold cyan]TUI stopped.[/bold cyan]")
+    HealingApp().run()

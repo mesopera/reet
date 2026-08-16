@@ -116,9 +116,9 @@ def run():
 
         # Step 4: LLM reasoning
         print("  Calling LLM for root cause analysis...")
-        incident = correlator.correlate(report)
+        result = correlator.correlate(report)
 
-        if incident is None:
+        if result is None:
             print("  [WARN] LLM reasoning failed — escalating raw anomaly report")
             audit.log_escalation(
                 None,
@@ -128,7 +128,7 @@ def run():
             time.sleep(POLL_INTERVAL)
             continue
 
-        incident_id = str(uuid.uuid4())
+        incident, incident_id = result
         print(f"  Root cause: {incident.root_cause}")
         print(f"  Confidence: {incident.confidence}")
         print(f"  Category: {incident.fault_category}")

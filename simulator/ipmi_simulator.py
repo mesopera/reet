@@ -51,10 +51,10 @@ class IpmiSimulator:
             if abs(self.sensors["Volt_12V"]["value"] - 12.0) > 0.6:
                 self.sensors["Volt_12V"]["status"] = "nc"
         else:
-            # Healthy - small random variations
-            self.sensors["CPU_Temp"]["value"] = 45 + np.random.normal(0, 2)
-            self.sensors["Fan1"]["value"] = 2400 + np.random.normal(0, 50)
-            self.sensors["Fan2"]["value"] = 2380 + np.random.normal(0, 50)
+            # Healthy - small random variations (tightened to avoid false positives)
+            self.sensors["CPU_Temp"]["value"] = 45 + np.random.normal(0, 0.6)
+            self.sensors["Fan1"]["value"] = 2400 + np.random.normal(0, 15)
+            self.sensors["Fan2"]["value"] = 2380 + np.random.normal(0, 15)
         
         return {
             "sensors": [

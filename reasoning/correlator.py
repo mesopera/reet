@@ -60,4 +60,4 @@ class Correlator:
             f"confidence={incident.confidence}, category={incident.fault_category}"
         )
 
-        return incident
+        return incident, incident_id
