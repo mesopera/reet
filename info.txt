@@ -1,0 +1,142 @@
+sqlite3 data/incidents.db "SELECT root_cause, reasoning_chain FROM incidents ORDER BY detected_at DESC LIMIT 3;"
+reasoning_chain
+
+time series
+sqlite3 data/incidents.db "SELECT detected_at, root_cause, confidence, fault_category, hardware_involved, action_taken, escalated FROM incidents ORDER BY detected_at DESC LIMIT 10;"
+
+python -m collector.orchestrator
+
+smart-
+
+python -c "
+from simulator.smart_simulator import SmartSimulator
+import json
+s = SmartSimulator('disk_failing_slow')
+for i in range(3):
+    print(json.dumps(s.get_reading(), indent=2))
+"
+
+
+
+Complete System Walkthrough — Zero to Report
+
+This document explains, from first principles, exactly what happens from the moment telemetry is generated to the moment a report reaches a human. No prior knowledge assumed. Read top to bottom in order — this is the actual sequence the system executes every cycle.
+
+Part 0 — The Vocabulary You Need First
+
+Before anything else, here's what the technical terms actually mean.
+
+SMART — Self-Monitoring, Analysis and Reporting Technology. Every modern hard drive and SSD has a tiny computer inside it that constantly tracks its own health — how many sectors have gone bad, how many read errors it's had, its temperature, how many hours it's been powered on. SMART is the protocol for asking the drive "how are you doing?" and getting back a list of numbered attributes (attribute #5 = reallocated sectors, #194 = temperature, etc). The real-world tool that reads this is called smartctl.
+
+IPMI — Intelligent Platform Management Interface. Separate from the drive, this is a small independent chip built into the server's motherboard (called a BMC — Baseboard Management Controller) that watches the physical hardware: CPU temperature, fan speed, power supply voltage. It runs even if the operating system crashes, because it's not part of the OS — it's part of the motherboard itself. The real-world tool is called ipmitool.
+
+ECC / MCE — ECC stands for Error-Correcting Code memory — RAM that can detect and silently fix small errors (a "bit flip" caused by cosmic rays, heat, or aging hardware). MCE stands for Machine Check Exception — the CPU's own mechanism for logging when something has gone wrong at the hardware level, including these memory corrections. A rising rate of these corrections is often the earliest sign a memory stick (DIMM) is dying. The real-world tool is called rasdaemon.
+
+/proc and /sys — These aren't real files on disk. They're a "virtual filesystem" that Linux exposes so you can read live information about the running system just by opening a file — /proc/meminfo for memory usage, /proc/loadavg for CPU load, /sys/block/sda/stat for disk activity. No special tool needed, just reading a file.
+
+journald — The systemd logging service. Every service on a modern Linux system writes its logs (errors, restarts, warnings) into one central structured log that journald manages. You query it with the journalctl command.
+
+Zombie process — When a program finishes running, its "parent" program is supposed to formally acknowledge it's done (called "reaping"). If the parent never does this, the finished program's entry lingers in the process table as a "zombie" — dead, but not cleaned up. Enough zombies can exhaust system resources.
+
+LLM — Large Language Model. In this system, it's Llama 3.1 8B (an open-source AI model), accessed through Groq's API. Its job here isn't writing essays — it's reading a structured description of a problem and producing a structured diagnosis.
+
+Pydantic — A Python library that enforces "this data MUST look exactly like this." We use it to reject any LLM output that doesn't precisely match the format we require, so a malformed or hallucinated response can never accidentally trigger an action.
+
+Part 1 — Where the Data Comes From (Simulation vs Reality)
+
+The system is designed to run in two modes controlled by one setting: MODE=simulate or MODE=live.
+
+In MODE=live (a real physical server), the collectors call the real tools directly: smartctl for SMART, ipmitool for IPMI, rasdaemon's logs for ECC, and real reads of /proc, /sys, and journalctl.
+
+In MODE=simulate (what we use for development and demo, since we don't have a fleet of failing physical servers to experiment on), three "simulator" modules generate realistic fake data that matches the exact same format real tools would produce:
+
+SmartSimulator — generates SMART attribute values. It can run in healthy mode (stable numbers with tiny random noise) or a fault mode like disk_failing_slow, where it mathematically grows the "reallocated sector count" attribute using an exponential curve, calibrated using real data from Backblaze (a company that publishes real failure statistics from 200,000+ actual hard drives).
+IpmiSimulator — generates fake sensor readings (CPU temp, fan RPM, voltage), with fault modes like cpu_thermal (temperature climbing) or fan_failure (RPM dropping to zero).
+EccSimulator — generates fake memory correction counts, healthy mode uses realistic low-level random noise, memory_degrading mode grows the error count exponentially over time.
+
+Critically, /proc, /sys, and journald data is never simulated — even in simulate mode, these come from the real, live operating system, because they cost nothing to read and add authenticity. Fault-injection tools (explained in Part 6) create real system events — real disk usage, real zombie processes — so those sources see genuine data, not synthetic data.
+
+Part 2 — Collection: Gathering Everything at Once
+
+Every polling cycle (by default every 60 seconds, though the demo uses 3 seconds to move faster), a component called the Orchestrator runs six separate "collector" objects simultaneously using something called a thread pool (multiple things happening in parallel instead of one after another).
+
+Each collector returns a list of readings, and every single reading — regardless of which of the six sources it came from — gets stamped with the exact same timestamp, taken once at the start of the cycle.
+
+Why this single shared timestamp matters so much: if a memory error and a program crash happen four seconds apart in reality, but our collectors run at slightly different times and give them different timestamps, we could never prove which one happened first. With one shared clock per cycle, we can say "in cycle 47, the memory error and the load spike appeared together" — and that's the entire foundation that lets the reasoning step later claim "A caused B."
+
+Each individual piece of data (one SMART attribute, one CPU temperature reading, one memory metric) is converted into a standard format called a TelemetryReading — it always has: which source it came from, which physical component it's about, what specific metric it is, the numeric value, the unit, the timestamp, and the raw original data. This uniform shape means every later part of the system can handle a SMART reading and a CPU-load reading identically, without needing custom logic for each of the six sources.
+
+Part 3 — Storage: Where the Data Goes to Live
+
+Two very different databases are used, for two very different jobs.
+
+InfluxDB stores the raw time-series telemetry — every single reading, every cycle, forever (or until you clear it). It's specifically built for exactly this kind of data: "at this exact time, this exact metric had this exact value" — and it's extremely fast at answering questions like "show me every SMART reading for drive sda in the last 72 hours," which the detection layer needs constantly.
+
+SQLite stores two very different kinds of records: incidents (a permanent record every time the system identifies a real problem — root cause, confidence, whether hardware was involved, what happened next) and the audit log (an append-only, tamper-evident history of every single decision the system made — every gate check, every action taken, every escalation — timestamped and linked back to the incident it belongs to).
+
+Part 4 — Anomaly Detection: Deciding What's Actually Worth Investigating
+
+Raw telemetry streams in constantly — most of it is boring and normal. Sending every single reading to the LLM would be slow and expensive. So before the LLM ever gets involved, four separate statistical detectors run automatically on every batch of readings, each catching a different kind of "something is wrong."
+
+Z-score detection — the simplest one. It keeps a running memory of the last several values for a given metric (say, CPU load), calculates the average and how much they normally vary, and flags a new reading if it's an unusually large number of "standard deviations" away from that average — in plain terms, "this value is way outside what's normal for this system recently."
+
+Isolation Forest — a machine learning technique that looks at all the metrics together at once instead of one at a time. Some problems don't show up as one wildly abnormal number — they show up as an unusual combination: slightly higher CPU, slightly higher memory, slightly higher disk I/O, none individually alarming, but together an unusual pattern the system has never seen. It "trains" on the first 200 readings to learn what normal looks like, then scores new readings against that learned baseline.
+
+Seasonal baseline — accounts for the fact that normal behavior isn't flat — a server working during business hours legitimately has higher CPU usage than at 3am. This detector learns the expected daily pattern and only flags a deviation from that expected pattern, not from a flat average, avoiding false alarms every single morning when load naturally rises.
+
+SMART acceleration model (the most novel part of the whole system) — instead of asking "is this SMART value above some fixed danger number," it asks "is this SMART value increasing at an increasing rate." Mathematically, it calculates the rate of change (how fast the number is growing) and then the rate of change of that rate (is the growth itself speeding up). A drive with a slowly, steadily rising error count for years is far less urgent than a drive whose error count is doubling every few hours — even if the second drive's absolute number is currently lower. This catches failures before they cross any static warning line, which is the entire point.
+
+If none of these four detectors find anything unusual, the cycle ends quietly and the system waits for the next one. If any of them do flag something, that flagged signal (or signals) moves on to the next stage.
+
+Part 5 — Reasoning: Asking the LLM "Why Did This Happen?"
+
+This is where an AI model gets involved, and it only ever sees data that a detector has already flagged as unusual — never raw, unfiltered data.
+
+Step 1 — building the prompt. The system assembles everything the LLM needs to reason properly: what exactly got flagged (source, component, metric, how severe), basic context about the server, and the last six hours of history for the relevant metrics pulled from InfluxDB, so the LLM can see the trend, not just a single snapshot.
+
+Step 2 — the system prompt. Along with that data, the LLM is given a strict rulebook: it must respond in one exact JSON format, must never claim a hardware fault without actual sensor evidence supporting it, and can only ever suggest one of four pre-approved actions (explained in Part 7) or nothing at all.
+
+Step 3 — the actual call. The prompt is sent to Llama 3.1 8B via Groq's API. The model reads everything and produces a response that should include: what it thinks the root cause is, which specific component is responsible, a confidence score between 0 and 1 (how sure it is), what category the fault falls into (hardware, OS, application, network, or database), whether hardware is involved at all, an ordered list of events showing what caused what (the "causal chain"), whether it thinks this is something that can be safely auto-fixed, which action (if any) it recommends, a plain-English summary a non-technical person could understand, and its own reasoning explaining how it reached that conclusion.
+
+Step 4 — validation, not trust. The raw text response is never trusted as-is. It's run through Pydantic, which checks: is this actually valid JSON (not broken text)? Does the confidence score actually fall between 0 and 1? Is the fault category one of the five allowed values? Is the suggested action one of the four allowed actions, or genuinely nothing? If any of these checks fail, the whole response is discarded and the system escalates immediately with the raw anomaly data instead of guessing what the AI meant.
+
+Part 6 — The Three Safety Gates: Deciding Whether to Actually Do Anything
+
+A validated diagnosis from the LLM does not mean the system takes action. It has to pass three independent checks, in order, and if even one fails, the system stops and writes a report for a human instead.
+
+Gate 1 — Confidence. Is the LLM's confidence score at least 75%? If it's not sure enough, it doesn't act — better to ask a human than guess.
+
+Gate 2 — Whitelist. Is the suggested action one of a small, fixed, pre-approved list, and do its specific parameters (like a service name) pass a strict pattern check to rule out anything malformed or dangerous? The AI can never invent a new action outside this approved list, no matter how confident it is.
+
+Gate 3 — Hardware veto. Is hardware involved anywhere in the causal chain, at all? If yes, the system never takes automatic action, full stop, regardless of how high the confidence was or whether the action was technically whitelisted. The reasoning: fixing a software symptom (like restarting a service) when the real cause is a dying piece of hardware doesn't actually solve anything, and can even delay someone noticing the hardware is failing until it's too late.
+
+If a fault clears all three gates, the system proceeds to execute the action. If it fails any single gate, the system escalates to a human report instead.
+
+Part 7 — Taking Action (When All Gates Pass)
+
+There are exactly four possible automatic actions the system is allowed to take, and each corresponds to a specific kind of common, safe, reversible software problem:
+
+Restart a service — if a specific application has crashed or hung.
+Vacuum (rotate/delete old) logs — if disk space is filling up with log files.
+Reap zombie processes — if dead, unacknowledged processes are piling up.
+Run a database VACUUM — if a database's internal bookkeeping has bloated and needs cleanup.
+
+Before running any action, the system takes a snapshot — a saved record of the system's current state — so there's something to compare against or roll back to if needed. It then executes the action, waits 60 seconds, and checks whether the original problem actually went away. If it did, the incident is marked resolved. If it didn't, the system escalates anyway, even though it already tried to fix it — because a fix that didn't work is itself useful information for a human to know about.
+
+Part 8 — When Hardware Is Involved: Building the Human Report
+
+If Gate 3 stops the system because hardware is involved, a separate process kicks in specifically to make the escalation useful rather than just a raw dump of numbers.
+
+Component localization — translates a generic signal like "SMART fault on sda" into an actual physical description: "Primary storage drive, Drive Bay 1," or "System memory, DIMM Slot A2" — something a person could act on without needing to be a hardware engineer.
+
+Urgency modeling — takes the acceleration data calculated back in Part 4 and classifies it into one of four plain categories: Monitor (not urgent yet), Schedule Maintenance (plan for it), High Urgency (do this in the next day or two), or Critical (do this today).
+
+Vendor lookup — looks up the actual drive manufacturer and model against a small reference table, so the report can suggest an actual, appropriate replacement part rather than a vague "buy a new drive."
+
+Report generation — takes all of the above and either asks the LLM to write it up as a clear, plain-language explanation (what's wrong, how urgent, what to check first, what to order), or — if that LLM call somehow fails — falls back to a fixed template that still produces a complete, readable report every time, so a report is always generated no matter what.
+
+That final report — whether AI-written or template-generated — is what gets saved as the human_report.
+
+Part 9 — Everything Gets Logged, Then the Cycle Repeats
+
+Regardless of which path was taken — automatic fix or human escalation — every single step along the way (what was detected, what the LLM concluded, which gate passed or failed, what action ran, what the outcome was) is written to the audit log in SQLite, linked to that specific incident's ID. Nothing is silently dropped. The system then goes back to sleep for the polling interval and starts the entire cycle over again from Part 2.
